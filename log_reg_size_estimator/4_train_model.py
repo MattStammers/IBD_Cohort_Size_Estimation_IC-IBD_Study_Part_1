@@ -158,7 +158,7 @@ def main():
     #    Outer CV: Repeated K-Fold (10 splits, 2 repeats).
     #    Inner CV: K-Fold (10 splits) for hyperparameter (C) selection using one-standard-error rule.
     # -------------------------------------------------------------------------
-    outer_cv = RepeatedKFold(n_splits=10, n_repeats=2, random_state=42)
+    outer_cv = RepeatedKFold(n_splits=10, n_repeats=1000, random_state=42)
 
     # Define a range of candidate values for the inverse regularization parameter C
     param_values = np.logspace(-4, 4, 20)

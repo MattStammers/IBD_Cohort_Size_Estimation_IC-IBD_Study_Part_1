@@ -1,4 +1,4 @@
-# This sample size estimator uses the formula proposed by Pate and Riley
+# This sample size estimator uses the formula proposed by Pate and Riley for medical models. Assumed shrinkage of 0.9 is used here. Reducing the shrinkage further for thie project may be appropriate but doesn't have a dramatic effect on the final sample size.
 
 import math
 
