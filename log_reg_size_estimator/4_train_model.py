@@ -39,7 +39,7 @@ def one_standard_error_rule_search(
     - X: Feature array for training.
     - y: Target array for training.
     - model: A scikit-learn pipeline or estimator on which the hyperparameter is set.
-    - param_name: Name of the hyperparameter to be tuned (e.g., 'lasso_lr__C').
+    - param_name: Name of the hyperparameter to be tuned (e.g., 'elasticnet_lr__C').
     - param_values: List or array of potential values for the hyperparameter.
     - scoring: Scoring metric to optimize ('roc_auc' is implemented).
     - inner_cv: Cross-validation splitter (an instance of KFold or similar) for inner CV.
@@ -141,16 +141,17 @@ def main():
     y_train = pd.read_csv(y_train_file).squeeze().values
 
     # -------------------------------------------------------------------------
-    # 2) Build a pipeline for scaling and logistic regression (L1 penalty, saga solver)
+    # 2) Build a pipeline for scaling and logistic regression (elasticnet penalty, saga solver)
     # -------------------------------------------------------------------------
     pipeline = Pipeline([
-        ('scaler', StandardScaler()),
-        ('lasso_lr', LogisticRegression(
-            penalty='l1',
-            solver='saga',
-            max_iter=10000,
-            random_state=42
-        ))
+    ('scaler', StandardScaler()),
+    ('elasticnet_lr', LogisticRegression(
+        penalty='elasticnet',
+        solver='saga',
+        l1_ratio=0.5, 
+        max_iter=10000,
+        random_state=42
+    ))
     ])
 
     # -------------------------------------------------------------------------
@@ -158,7 +159,7 @@ def main():
     #    Outer CV: Repeated K-Fold (10 splits, 2 repeats).
     #    Inner CV: K-Fold (10 splits) for hyperparameter (C) selection using one-standard-error rule.
     # -------------------------------------------------------------------------
-    outer_cv = RepeatedKFold(n_splits=10, n_repeats=10, random_state=42)
+    outer_cv = RepeatedKFold(n_splits=10, n_repeats=1000, random_state=42)
 
     # Define a range of candidate values for the inverse regularization parameter C
     param_values = np.logspace(-4, 4, 20)
@@ -182,7 +183,7 @@ def main():
             X_tr, 
             y_tr, 
             model=pipeline, 
-            param_name='lasso_lr__C', 
+            param_name='elasticnet_lr__C', 
             param_values=param_values, 
             scoring='roc_auc', 
             inner_cv=inner_cv
@@ -192,7 +193,7 @@ def main():
         # ---------------------------------------------------------------------
         # (B) Retrain the pipeline on the outer training data using the chosen parameter.
         # ---------------------------------------------------------------------
-        pipeline.set_params(lasso_lr__C=chosen_param)
+        pipeline.set_params(elasticnet_lr__C=chosen_param)
         pipeline.fit(X_tr, y_tr)
         
         # Evaluate the trained model on the outer test set
@@ -226,7 +227,7 @@ def main():
     final_chosen_param = max(set(chosen_params_across_folds),
                              key=chosen_params_across_folds.count)
 
-    pipeline.set_params(lasso_lr__C=final_chosen_param)
+    pipeline.set_params(elasticnet_lr__C=final_chosen_param)
     pipeline.fit(X_train, y_train)
 
     print(f"\nFinal chosen C after nested CV voting: {final_chosen_param:.6f}")

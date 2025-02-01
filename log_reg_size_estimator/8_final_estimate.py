@@ -51,10 +51,10 @@ def main():
         # 3) Identify unique IBD-positive predictions
         # ---------------------------------------------------------------------
         # Extract study IDs where IBD_Predicted equals 1.
-        positive_predictions = ibd_predictions.loc[ibd_predictions['IBD_Predicted'] == 1, 'study_id']
+        positive_predictions_list = ibd_predictions.loc[ibd_predictions['IBD_Predicted'] == 1, 'study_id']
         # Adjust positive predictions by the precision of this algorithm
-        positive_predictions = int(round(positive_predictions * 0.86))
-        print(f"Number of True IBD-positive predictions: {len(positive_predictions)}")
+        positive_predictions = int(round(len(positive_predictions_list) * 0.86))
+        print(f"Number of True IBD-positive predictions: {positive_predictions}")
 
         # ---------------------------------------------------------------------
         # 4) Identify patients with IBD_Suggestive == 1 not in ibd_predictions
@@ -64,7 +64,7 @@ def main():
         print(f"Number of IBD-suggestive patients in clinic_letters: {len(suggestive_patients)}")
 
         # Identify patients that are flagged as suggestive but were not already predicted as positive.
-        suggestive_only = suggestive_patients[~suggestive_patients.isin(positive_predictions)]
+        suggestive_only = suggestive_patients[~suggestive_patients.isin(positive_predictions_list)]
         print(f"Number of IBD-suggestive patients not in ibd_predictions: {len(suggestive_only)}")
 
         # Apply a precision adjustment factor (83% precision) to the suggestive patients count.
@@ -75,7 +75,7 @@ def main():
         # 5) Calculate the final cohort size
         # ---------------------------------------------------------------------
         # Sum the number of positive predictions and the precision-adjusted suggestive count.
-        final_cohort_size = len(positive_predictions) + suggestive_precision_adjusted
+        final_cohort_size = positive_predictions + suggestive_precision_adjusted
         print(f"Final IBD cohort size estimate: {final_cohort_size}")
 
         # ---------------------------------------------------------------------
@@ -83,7 +83,7 @@ def main():
         # ---------------------------------------------------------------------
         # Save the results to a text file.
         with open(output_file, 'w') as f:
-            f.write(f"Number of IBD-positive predictions (IBD_Predicted == 1): {len(positive_predictions)}\n")
+            f.write(f"Number of IBD-positive predictions (IBD_Predicted == 1): {positive_predictions}\n")
             f.write(f"Number of IBD-suggestive patients not in predictions: {len(suggestive_only)}\n")
             f.write(f"Final IBD cohort size estimate: {final_cohort_size}\n")
 
