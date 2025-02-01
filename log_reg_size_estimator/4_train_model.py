@@ -10,8 +10,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import roc_auc_score, brier_score_loss
 
-# Import standard libraries for statistical calculations (for the one-standard-error rule)
-from statistics import mean, stdev
+# Import calibration module for platt regression calibration
+from sklearn.calibration import CalibratedClassifierCV
 
 # Optional additional imports (for visualization and fairness analysis)
 import seaborn as sns
@@ -29,25 +29,6 @@ def one_standard_error_rule_search(
 ):
     """
     Perform a custom hyperparameter search using the one-standard-error rule.
-
-    For each parameter value in param_values, performs cross-validation with inner_cv and
-    computes the performance metric (using the specified scoring, currently supports 'roc_auc').
-    The function then selects the simplest model whose mean performance is within one standard
-    error of the best (highest mean) performance found.
-
-    Parameters:
-    - X: Feature array for training.
-    - y: Target array for training.
-    - model: A scikit-learn pipeline or estimator on which the hyperparameter is set.
-    - param_name: Name of the hyperparameter to be tuned (e.g., 'elasticnet_lr__C').
-    - param_values: List or array of potential values for the hyperparameter.
-    - scoring: Scoring metric to optimize ('roc_auc' is implemented).
-    - inner_cv: Cross-validation splitter (an instance of KFold or similar) for inner CV.
-
-    Returns:
-    - chosen_param: The hyperparameter value selected by the one-standard-error rule.
-    - cv_results: A list of dictionaries containing for each parameter value:
-        'param_value', 'mean_score', 'std_score', and 'all_scores'.
     """
     cv_results = []
     
@@ -86,14 +67,12 @@ def one_standard_error_rule_search(
     
     # Determine the best mean score achieved among all hyperparameter values
     best_mean = max(r['mean_score'] for r in cv_results)
-    # For all parameter values with best mean, take the maximum standard deviation as reference
     best_std = max(r['std_score'] for r in cv_results if r['mean_score'] == best_mean)
     
     # Define the threshold: one standard error below the best mean score
     one_se_threshold = best_mean - best_std
     
     # Among parameters with a mean score above the threshold, choose the simplest model.
-    # For L1 logistic regression, smaller C implies more regularization (thus, "simpler").
     candidates = [
         (r['param_value'], r['mean_score']) 
         for r in cv_results 
@@ -109,19 +88,8 @@ def one_standard_error_rule_search(
 
 def main():
     """
-    Main function to perform nested cross-validation for logistic regression with L1 penalty
-    using the one-standard-error rule for hyperparameter selection.
-
-    The process includes:
-    1) Loading the training data and target.
-    2) Building a pipeline that includes feature scaling and L1-regularized logistic regression.
-    3) Running nested cross-validation:
-       - Outer CV: Repeated K-Fold to estimate model performance.
-       - Inner CV: K-Fold CV to select the hyperparameter (regularization parameter C) using the
-         one-standard-error rule.
-    4) Reporting cross-validation performance metrics (ROC AUC and Brier score).
-    5) Fitting a final model on the entire training set using the most frequently chosen parameter.
-    6) Saving the final pipeline to disk.
+    Main function to perform nested cross-validation for a pipeline that calibrates a 
+    logistic regression model using platt scaling.
     """
     # -------------------------------------------------------------------------
     # 1) Load the data
@@ -141,27 +109,33 @@ def main():
     y_train = pd.read_csv(y_train_file).squeeze().values
 
     # -------------------------------------------------------------------------
-    # 2) Build a pipeline for scaling and logistic regression (elasticnet penalty, saga solver)
+    # 2) Build a pipeline for scaling, base logistic regression, and platt calibration
     # -------------------------------------------------------------------------
-    pipeline = Pipeline([
-    ('scaler', StandardScaler()),
-    ('elasticnet_lr', LogisticRegression(
+    # Define the base logistic regression model with elasticnet penalty.
+    base_lr = LogisticRegression(
         penalty='elasticnet',
         solver='saga',
         l1_ratio=0.5, 
         max_iter=10000,
         random_state=42
-    ))
+    )
+    
+    # Wrap the base logistic regression in a calibrated classifier using platt regression.
+    calibrated_clf = CalibratedClassifierCV(estimator=base_lr, method='sigmoid', cv=5)
+
+    # Build the pipeline with a scaler and the calibrated classifier.
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ('calibrated', calibrated_clf)
     ])
 
     # -------------------------------------------------------------------------
     # 3) Perform nested cross-validation
-    #    Outer CV: Repeated K-Fold (10 splits, 2 repeats).
-    #    Inner CV: K-Fold (10 splits) for hyperparameter (C) selection using one-standard-error rule.
     # -------------------------------------------------------------------------
     outer_cv = RepeatedKFold(n_splits=10, n_repeats=100, random_state=42)
 
-    # Define a range of candidate values for the inverse regularization parameter C
+    # Define a range of candidate values for the inverse regularization parameter C.
+    # (This parameter belongs to the base logistic regression inside the calibrated classifier.)
     param_values = np.logspace(-4, 4, 20)
 
     outer_auc_scores = []
@@ -178,12 +152,13 @@ def main():
 
         # ---------------------------------------------------------------------
         # (A) Use the one-standard-error rule to search for the best hyperparameter (C)
+        #     Since the parameter is inside the calibrated classifier, use 'calibrated__estimator__C'
         # ---------------------------------------------------------------------
         chosen_param, cv_results = one_standard_error_rule_search(
             X_tr, 
             y_tr, 
             model=pipeline, 
-            param_name='elasticnet_lr__C', 
+            param_name='calibrated__estimator__C', 
             param_values=param_values, 
             scoring='roc_auc', 
             inner_cv=inner_cv
@@ -193,7 +168,7 @@ def main():
         # ---------------------------------------------------------------------
         # (B) Retrain the pipeline on the outer training data using the chosen parameter.
         # ---------------------------------------------------------------------
-        pipeline.set_params(elasticnet_lr__C=chosen_param)
+        pipeline.set_params(calibrated__estimator__C=chosen_param)
         pipeline.fit(X_tr, y_tr)
         
         # Evaluate the trained model on the outer test set
@@ -214,7 +189,7 @@ def main():
     mean_brier = np.mean(outer_brier_scores)
     std_brier = np.std(outer_brier_scores)
 
-    print("Nested CV Results (One-Standard-Error Rule)")
+    print("Nested CV Results (platt Calibration)")
     print(f"  AUC:   {mean_auc:.4f} ± {std_auc:.4f}")
     print(f"  Brier: {mean_brier:.4f} ± {std_brier:.4f}")
     print("Chosen C parameters in each outer fold:")
@@ -222,12 +197,11 @@ def main():
 
     # -------------------------------------------------------------------------
     # 5) Fit the final model on all the data.
-    #    (Here, the parameter that appears most frequently in outer CV is selected.)
     # -------------------------------------------------------------------------
     final_chosen_param = max(set(chosen_params_across_folds),
                              key=chosen_params_across_folds.count)
 
-    pipeline.set_params(elasticnet_lr__C=final_chosen_param)
+    pipeline.set_params(calibrated__estimator__C=final_chosen_param)
     pipeline.fit(X_train, y_train)
 
     print(f"\nFinal chosen C after nested CV voting: {final_chosen_param:.6f}")
@@ -236,8 +210,7 @@ def main():
     # 6) Save the final pipeline.
     # -------------------------------------------------------------------------
     joblib.dump(pipeline, final_model_file)
-    print(f"Trained pipeline (scaler + L1 logistic) saved to {final_model_file}")
+    print(f"Trained pipeline (scaler + calibrated logistic regression with platt regression) saved to {final_model_file}")
 
 if __name__ == "__main__":
-    # Execute the main function when running this script directly
     main()
