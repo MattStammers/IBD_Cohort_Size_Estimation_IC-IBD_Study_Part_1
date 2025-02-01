@@ -9,7 +9,8 @@ def main():
     The process includes:
       1) Defining file paths for IBD predictions, clinic letters, and the output file.
       2) Loading the datasets (predictions and clinic letters) into DataFrames.
-      3) Identifying patients with a positive IBD prediction from the predictions dataset.
+      3) Identifying patients with a positive IBD prediction from the predictions dataset 
+         counting only true positive values from here.
       4) Finding patients flagged as IBD-suggestive in the clinic letters dataset 
          that are NOT present in the predictions.
       5) Adjusting the count of suggestive patients by a defined precision factor.
@@ -51,7 +52,9 @@ def main():
         # ---------------------------------------------------------------------
         # Extract study IDs where IBD_Predicted equals 1.
         positive_predictions = ibd_predictions.loc[ibd_predictions['IBD_Predicted'] == 1, 'study_id']
-        print(f"Number of IBD-positive predictions: {len(positive_predictions)}")
+        # Adjust positive predictions by the precision of this algorithm
+        positive_predictions = int(round(positive_predictions * 0.86))
+        print(f"Number of True IBD-positive predictions: {len(positive_predictions)}")
 
         # ---------------------------------------------------------------------
         # 4) Identify patients with IBD_Suggestive == 1 not in ibd_predictions
@@ -66,7 +69,7 @@ def main():
 
         # Apply a precision adjustment factor (83% precision) to the suggestive patients count.
         suggestive_precision_adjusted = int(round(len(suggestive_only) * 0.83))
-        print(f"Number of IBD-suggestive patients not in ibd_predictions after precision adjustment: {suggestive_precision_adjusted}")
+        print(f"Number of True IBD-suggestive patients not in ibd_predictions after precision adjustment: {suggestive_precision_adjusted}")
 
         # ---------------------------------------------------------------------
         # 5) Calculate the final cohort size

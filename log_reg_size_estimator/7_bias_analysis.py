@@ -237,7 +237,7 @@ def plot_metric(metric_frame, metric_name, group_name, output_path):
         "age_decile_10_100": ["<10", "10-19", "20-29", "30-39", "40-49",
                                "50-59", "60-69", "70-79", "80-89", "90-99", "100+"],
         "imd_bin": ["1-2", "3-4", "5-6", "7-8", "9-10", "Unknown", "OutOfRange"],
-        "sex": ["Male", "Female", "Unknown"],
+        "sex": ["M", "F", "Unknown"],
         "ethnicity": []  # Add explicit ordering if needed.
     }
     
