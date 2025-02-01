@@ -32,7 +32,8 @@ def specificity(y_true, y_pred):
     """
     if len(set(y_true)) < 2:
         return float('nan')
-    return recall_score(y_true, y_pred, pos_label=0)
+    # Use zero_division=0 to avoid warnings when there are no true negatives
+    return recall_score(y_true, y_pred, pos_label=0, zero_division=0)
 
 def custom_false_positive_rate(y_true, y_pred):
     """
@@ -52,6 +53,9 @@ def custom_false_positive_rate(y_true, y_pred):
     if len(set(y_true)) < 2 or len(set(y_pred)) < 2:
         return float('nan')
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    # Check for division by zero
+    if (fp + tn) == 0:
+        return float('nan')
     return fp / (fp + tn)
 
 def custom_false_negative_rate(y_true, y_pred):
@@ -72,11 +76,13 @@ def custom_false_negative_rate(y_true, y_pred):
     if len(set(y_true)) < 2 or len(set(y_pred)) < 2:
         return float('nan')
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    if (fn + tp) == 0:
+        return float('nan')
     return fn / (fn + tp)
 
 def custom_auc_score(y_true, y_pred=None, y_prob=None, **kwargs):
     """
-    Compute the AUC (Area Under the Receiver Operating Characteristic Curve)
+    Compute the AUROC (Area Under the Receiver Operating Characteristic Curve)
     using predicted probabilities.
 
     Parameters:
@@ -86,11 +92,31 @@ def custom_auc_score(y_true, y_pred=None, y_prob=None, **kwargs):
     - **kwargs: Additional keyword arguments (unused).
 
     Returns:
-    - AUC value (float). If y_true contains less than two unique classes, returns NaN.
+    - AUROC value (float). If y_true contains less than two unique classes, returns NaN.
+    
+    Raises:
+    - ValueError: If y_prob is not provided.
     """
+    if y_prob is None:
+        raise ValueError("y_prob must be provided as predicted probabilities to compute the AUROC.")
+    
+    # If there is only one unique value in y_true, return NaN since ROC AUC is undefined.
     if len(set(y_true)) < 2:
         return float('nan')
+    
     return roc_auc_score(y_true, y_prob)
+
+def safe_recall(y_true, y_pred):
+    """
+    Wrapper for recall_score with zero_division=0.
+    """
+    return recall_score(y_true, y_pred, zero_division=0)
+
+def safe_precision(y_true, y_pred):
+    """
+    Wrapper for precision_score with zero_division=0.
+    """
+    return precision_score(y_true, y_pred, zero_division=0)
 
 ##############################
 # Binning / Categorization
@@ -186,9 +212,9 @@ def evaluate_bias(y_true, y_pred, y_pred_proba, sensitive_feature):
     """
     metrics_dict = {
         'AUC': custom_auc_score,
-        'Sensitivity (Recall)': recall_score,
+        'Sensitivity (Recall)': safe_recall,
         'Specificity': specificity,
-        'Precision': precision_score,
+        'Precision': safe_precision,
         'False Positive Rate': custom_false_positive_rate,
         'False Negative Rate': custom_false_negative_rate
     }
