@@ -25,40 +25,79 @@ def compute_classification_metrics(y_true, y_pred_proba, threshold):
     - recall: Recall (sensitivity) value.
     - accuracy: Overall accuracy.
     """
-    # Convert probabilities into binary class predictions based on the threshold
     y_pred_class = (y_pred_proba >= threshold).astype(int)
-    # Compute the confusion matrix components (TN, FP, FN, TP)
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred_class).ravel()
-
-    # Calculate precision (TP / (TP + FP))
     precision = tp / (tp + fp) if (tp + fp) > 0 else np.nan
-    # Calculate recall (TP / (TP + FN))
     recall = tp / (tp + fn) if (tp + fn) > 0 else np.nan
-    # Calculate accuracy ((TP + TN) / total samples)
     accuracy = (tp + tn) / (tp + tn + fp + fn)
     return precision, recall, accuracy
+
+def bootstrap_classification_metrics(y_true, y_pred_proba, threshold, n_boot=1000, alpha=0.05):
+    """
+    Bootstrap confidence intervals for precision, recall, and accuracy at a given threshold.
+    Returns a dictionary with keys 'precision', 'recall', and 'accuracy', each containing a tuple (lower, upper).
+    """
+    metrics = {"precision": [], "recall": [], "accuracy": []}
+    y_true = np.array(y_true)
+    y_pred_proba = np.array(y_pred_proba)
+    n = len(y_true)
+    
+    for _ in range(n_boot):
+        indices = np.random.choice(n, size=n, replace=True)
+        prec, rec, acc = compute_classification_metrics(y_true[indices], y_pred_proba[indices], threshold)
+        metrics["precision"].append(prec)
+        metrics["recall"].append(rec)
+        metrics["accuracy"].append(acc)
+    
+    ci = {}
+    for key, values in metrics.items():
+        lower = np.percentile(values, 100 * alpha / 2)
+        upper = np.percentile(values, 100 * (1 - alpha / 2))
+        ci[key] = (lower, upper)
+    return ci
+
+def bootstrap_predicted_count(y_pred_proba, threshold, n_boot=1000, alpha=0.05):
+    """
+    Bootstrap confidence interval for the count of predicted positives (IBD cases) given probabilities and a threshold.
+    """
+    counts = []
+    y_pred_proba = np.array(y_pred_proba)
+    n = len(y_pred_proba)
+    for _ in range(n_boot):
+        indices = np.random.choice(n, size=n, replace=True)
+        count = int((y_pred_proba[indices] >= threshold).sum())
+        counts.append(count)
+    lower = np.percentile(counts, 100 * alpha / 2)
+    upper = np.percentile(counts, 100 * (1 - alpha / 2))
+    return (int(lower), int(upper))
+
+def bootstrap_estimated_true_ibd(y_true_valid, y_pred_proba_valid, y_pred_proba_all, threshold, n_boot=1000, alpha=0.05):
+    """
+    Bootstrap confidence interval for the estimated true IBD count in the entire dataset.
+    For each bootstrap sample, compute precision on valid rows and multiply by the bootstrapped predicted count on all rows.
+    """
+    estimates = []
+    y_true_valid = np.array(y_true_valid)
+    y_pred_proba_valid = np.array(y_pred_proba_valid)
+    y_pred_proba_all = np.array(y_pred_proba_all)
+    n_valid = len(y_true_valid)
+    n_all = len(y_pred_proba_all)
+    
+    for _ in range(n_boot):
+        idx_valid = np.random.choice(n_valid, size=n_valid, replace=True)
+        idx_all = np.random.choice(n_all, size=n_all, replace=True)
+        prec, _, _ = compute_classification_metrics(y_true_valid[idx_valid], y_pred_proba_valid[idx_valid], threshold)
+        count_all = (y_pred_proba_all[idx_all] >= threshold).sum()
+        if not np.isnan(prec):
+            estimates.append(prec * count_all)
+    lower = np.percentile(estimates, 100 * alpha / 2)
+    upper = np.percentile(estimates, 100 * (1 - alpha / 2))
+    return (int(round(lower)), int(round(upper)))
 
 def main():
     """
     Main function to apply the trained model to the entire dataset and generate predictions,
-    perform threshold analysis, and save all relevant outputs.
-
-    The process includes:
-      1) Defining file paths for the dataset, model, preprocessor, and outputs.
-      2) Loading the merged dataset and preserving the study IDs and ground truth (if available).
-      3) Loading the preprocessor and final model.
-      4) Ensuring the dataset contains exactly the raw columns expected by the preprocessor;
-         missing columns are created with default zeros and extra columns are dropped.
-      5) Applying the preprocessor to transform the entire dataset.
-      6) Loading the JSON file containing the indices of the final selected features and selecting
-         the corresponding columns.
-      7) Loading the optimal probability threshold (or using a default of 0.5 if not found).
-      8) Generating predictions (probabilities and binary predictions) on the entire dataset.
-      9) Saving the predictions to a CSV file.
-     10) Estimating the total number of IBD cases using the selected threshold.
-     11) Performing threshold analysis (computing metrics like precision, recall, accuracy, predicted counts,
-         and estimated true IBD by threshold) over a specified threshold range.
-     12) Saving the threshold analysis results to both JSON and CSV files.
+    perform threshold analysis (including bootstrapped confidence intervals), and save all relevant outputs.
     """
     try:
         # ---------------------------------------------------------------------
@@ -85,10 +124,8 @@ def main():
         df = pd.read_csv(merged_dataframe_file)
         print(f"Merged dataframe has {len(df)} rows.")
 
-        # Preserve study_id for later output (if available)
         study_ids = df['study_id'].copy() if 'study_id' in df.columns else None
 
-        # Preserve ground truth 'IBD' for threshold analysis if available
         y_true = None
         if 'IBD' in df.columns:
             y_true = df['IBD'].copy()
@@ -101,7 +138,6 @@ def main():
         model = joblib.load(final_model_file)
         print("Preprocessor and model loaded successfully.")
 
-        # Check if the preprocessor provides expected raw column names
         if hasattr(preprocessor, 'feature_names_in_'):
             expected_raw_cols = list(preprocessor.feature_names_in_)
             print(f"Pipeline expects {len(expected_raw_cols)} raw columns:\n{expected_raw_cols}")
@@ -111,13 +147,11 @@ def main():
         # ---------------------------------------------------------------------
         # 4) Ensure df has exactly those expected raw columns
         # ---------------------------------------------------------------------
-        # Create missing columns with default zero
         missing_raw = [c for c in expected_raw_cols if c not in df.columns]
         for col in missing_raw:
             df[col] = 0
             print(f"Created missing raw column '{col}' with default=0.")
 
-        # Identify and drop extra columns that are not expected by the pipeline
         extra_in_df = [c for c in df.columns if c not in expected_raw_cols]
         if extra_in_df:
             print(f"Dropping extra columns not expected by the pipeline: {extra_in_df}")
@@ -135,12 +169,10 @@ def main():
         # ---------------------------------------------------------------------
         if not os.path.exists(selected_indices_file):
             raise FileNotFoundError(
-                f"Could not find {selected_indices_file}, which should contain "
-                "the indices used by the final model in JSON format."
+                f"Could not find {selected_indices_file}, which should contain the indices used by the final model in JSON format."
             )
         with open(selected_indices_file, 'r') as f_json:
             feature_to_index = json.load(f_json)
-        # Get the list of indices corresponding to the final features
         selected_indices = list(feature_to_index.values())
         print(f"Selecting columns {selected_indices} from the pipeline output.")
         X_final = X_full_preprocessed[:, selected_indices]
@@ -176,7 +208,6 @@ def main():
             'IBD_Predicted_Probability': y_proba,
             'IBD_Predicted': y_pred
         })
-        # Round predicted probabilities for better readability
         out_df['IBD_Predicted_Probability'] = out_df['IBD_Predicted_Probability'].round(2)
         
         if study_ids is not None:
@@ -199,16 +230,13 @@ def main():
 
         # ---------------------------------------------------------------------
         # 12) Perform threshold analysis on the entire dataset
-        #     Compute metrics (precision, recall, accuracy) and counts at various thresholds,
-        #     and estimate the true number of IBD patients based on precision.
         # ---------------------------------------------------------------------
         if y_true is not None:
-            # Use only rows with available ground truth for metric computations
             valid_mask = y_true.notna()
             y_true_valid = y_true[valid_mask].values
             y_proba_valid = y_proba[valid_mask]
 
-            # Compute global AUROC and PRAUC for the valid rows
+            # Global AUROC and PRAUC (point estimates)
             auc_roc = roc_auc_score(y_true_valid, y_proba_valid)
             auc_pr = average_precision_score(y_true_valid, y_proba_valid)
             global_auroc = round(auc_roc, 2)
@@ -217,46 +245,51 @@ def main():
             # Define a range of thresholds from 0.25 to 0.75
             threshold_range = np.linspace(0.25, 0.75, 9)
             threshold_metrics = {}
+
             for t in threshold_range:
                 t_rounded = round(t, 2)
+                # Compute point estimates
                 precision, recall, accuracy = compute_classification_metrics(y_true_valid, y_proba_valid, t)
-                # Round metrics for clarity
                 precision_rounded = round(precision, 2) if not np.isnan(precision) else np.nan
                 recall_rounded = round(recall, 2) if not np.isnan(recall) else np.nan
                 accuracy_rounded = round(accuracy, 2) if not np.isnan(accuracy) else np.nan
-                
-                # Compute the count of predicted IBD cases for valid rows and the entire dataset
-                y_pred_valid = (y_proba_valid >= t).astype(int)
-                predicted_ibd_valid = int(y_pred_valid.sum())
-                predicted_ibd_all = int((y_proba >= t).astype(int).sum())
 
-                # Estimate the true number of IBD cases in the entire dataset using the precision at this threshold
-                if not np.isnan(precision_rounded):
-                    estimated_true_ibd_all = int(round(precision_rounded * predicted_ibd_all))
-                else:
-                    estimated_true_ibd_all = np.nan
+                # Predicted IBD counts (point estimates)
+                predicted_ibd_valid = int((y_proba_valid >= t).sum())
+                predicted_ibd_all = int((y_proba >= t).sum())
+                estimated_true_ibd_all = int(round(precision_rounded * predicted_ibd_all)) if not np.isnan(precision_rounded) else np.nan
+
+                # Bootstrapped confidence intervals
+                metric_ci = bootstrap_classification_metrics(y_true_valid, y_proba_valid, t)
+                predicted_valid_ci = bootstrap_predicted_count(y_proba_valid, t)
+                predicted_all_ci = bootstrap_predicted_count(y_proba, t)
+                estimated_true_ibd_ci = bootstrap_estimated_true_ibd(y_true_valid, y_proba_valid, y_proba, t)
 
                 threshold_metrics[t_rounded] = {
                     'Precision': precision_rounded,
+                    'Precision 95% CI': [round(metric_ci['precision'][0], 2), round(metric_ci['precision'][1], 2)],
                     'Recall': recall_rounded,
+                    'Recall 95% CI': [round(metric_ci['recall'][0], 2), round(metric_ci['recall'][1], 2)],
                     'Accuracy': accuracy_rounded,
+                    'Accuracy 95% CI': [round(metric_ci['accuracy'][0], 2), round(metric_ci['accuracy'][1], 2)],
                     'Predicted_IBD_Valid': predicted_ibd_valid,
+                    'Predicted_IBD_Valid 95% CI': predicted_valid_ci,
                     'Predicted_IBD_All': predicted_ibd_all,
+                    'Predicted_IBD_All 95% CI': predicted_all_ci,
                     'Estimated_True_IBD_All': estimated_true_ibd_all,
+                    'Estimated_True_IBD_All 95% CI': estimated_true_ibd_ci,
                     'Global_AUROC': global_auroc,
                     'Global_PRAUC': global_prauc
                 }
             
-            # Compile the threshold analysis results
+            # Compile and save the threshold analysis results
             results = {
                 "Threshold_Metrics": threshold_metrics
             }
             
-            # Save the threshold analysis results to a JSON file
             with open(threshold_analysis_json_file, 'w') as f_json:
                 json.dump(results, f_json, indent=4)
 
-            # Convert threshold metrics to a DataFrame and save as CSV
             df_threshold = pd.DataFrame.from_dict(threshold_metrics, orient='index')
             df_threshold.index.name = 'Threshold'
             df_threshold = df_threshold.reset_index()
@@ -272,5 +305,4 @@ def main():
         print(f"An error occurred during prediction: {e}")
 
 if __name__ == "__main__":
-    # Execute the main function when running the script directly
     main()

@@ -1,16 +1,12 @@
-import pandas as pd
-import joblib
-from sklearn.metrics import (
-    roc_auc_score, brier_score_loss, roc_curve, confusion_matrix
-)
-from sklearn.calibration import calibration_curve
-import matplotlib.pyplot as plt
-import json
 import os
+import json
+import joblib
 import numpy as np
-
-# Imported for LOESS/logistic calibration plots
+import pandas as pd
+import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import roc_auc_score, brier_score_loss, roc_curve, confusion_matrix
+from sklearn.calibration import calibration_curve
 
 def compute_classification_metrics(y_true, y_pred_proba, threshold):
     """
@@ -38,38 +34,78 @@ def compute_classification_metrics(y_true, y_pred_proba, threshold):
     # Obtain confusion matrix components: TN, FP, FN, TP
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred_class).ravel()
 
-    # Calculate precision (PPV) as TP / (TP + FP)
     precision = tp / (tp + fp) if (tp + fp) > 0 else np.nan
-
-    # Calculate recall (sensitivity) as TP / (TP + FN)
     recall = tp / (tp + fn) if (tp + fn) > 0 else np.nan
-
-    # Calculate specificity as TN / (TN + FP)
     specificity = tn / (tn + fp) if (tn + fp) > 0 else np.nan
-
-    # Calculate accuracy as (TP + TN) divided by total samples
     accuracy = (tp + tn) / (tp + tn + fp + fn)
-
     return precision, recall, specificity, accuracy
+
+def bootstrap_auc(y_true, y_pred_proba, n_boot=1000, alpha=0.05):
+    """
+    Compute bootstrap confidence intervals for ROC AUC.
+    """
+    aucs = []
+    y_true = np.array(y_true)
+    y_pred_proba = np.array(y_pred_proba)
+    n = len(y_true)
+    for i in range(n_boot):
+        indices = np.random.choice(n, size=n, replace=True)
+        try:
+            auc_val = roc_auc_score(y_true[indices], y_pred_proba[indices])
+            aucs.append(auc_val)
+        except Exception:
+            # Skip bootstrap samples that cause errors (e.g., only one class present)
+            continue
+    lower = np.percentile(aucs, 100 * alpha / 2)
+    upper = np.percentile(aucs, 100 * (1 - alpha / 2))
+    return lower, upper
+
+def bootstrap_brier(y_true, y_pred_proba, n_boot=1000, alpha=0.05):
+    """
+    Compute bootstrap confidence intervals for the Brier score.
+    """
+    briers = []
+    y_true = np.array(y_true)
+    y_pred_proba = np.array(y_pred_proba)
+    n = len(y_true)
+    for i in range(n_boot):
+        indices = np.random.choice(n, size=n, replace=True)
+        try:
+            brier_val = brier_score_loss(y_true[indices], y_pred_proba[indices])
+            briers.append(brier_val)
+        except Exception:
+            continue
+    lower = np.percentile(briers, 100 * alpha / 2)
+    upper = np.percentile(briers, 100 * (1 - alpha / 2))
+    return lower, upper
+
+def bootstrap_classification_metrics(y_true, y_pred_proba, threshold, n_boot=1000, alpha=0.05):
+    """
+    Bootstrap confidence intervals for classification metrics at a given threshold.
+    Returns a dictionary with 95% CI tuples for precision, recall, specificity, and accuracy.
+    """
+    metrics = {"precision": [], "recall": [], "specificity": [], "accuracy": []}
+    y_true = np.array(y_true)
+    y_pred_proba = np.array(y_pred_proba)
+    n = len(y_true)
+    for i in range(n_boot):
+        indices = np.random.choice(n, size=n, replace=True)
+        prec, rec, spec, acc = compute_classification_metrics(y_true[indices], y_pred_proba[indices], threshold)
+        metrics["precision"].append(prec)
+        metrics["recall"].append(rec)
+        metrics["specificity"].append(spec)
+        metrics["accuracy"].append(acc)
+    ci = {}
+    for key, values in metrics.items():
+        lower = np.percentile(values, 2.5)
+        upper = np.percentile(values, 97.5)
+        ci[key] = (lower, upper)
+    return ci
 
 def main():
     """
     Main function to evaluate a trained model using various classification and calibration metrics.
-
-    The process includes:
-    1) Defining file paths for the validation data, model, and various outputs.
-    2) Loading the validation features, true labels, and the trained model.
-    3) Generating predicted probabilities for the positive class.
-    4) Computing overall performance metrics such as ROC AUC and Brier score.
-    5) Determining the optimal classification threshold using Youden's J statistic.
-    6) Computing classification metrics (sensitivity, specificity, precision, accuracy)
-       for a range of thresholds.
-    7) Saving evaluation metrics as JSON.
-    8) Generating and saving calibration plots:
-         - Standard calibration curve.
-         - LOESS calibration plot.
-         - Logistic regression calibration plot.
-    9) Generating and saving the ROC curve plot.
+    Now also computes bootstrapped 95% confidence intervals for overall and threshold-specific metrics.
     """
     # Define paths relative to the script's directory
     script_dir = os.path.dirname(__file__)
@@ -84,8 +120,6 @@ def main():
     calibration_plot_file = os.path.join(log_reg_dir, 'calibration_plot.png')
     roc_curve_file = os.path.join(log_reg_dir, 'roc_curve.png')
     optimal_threshold_file = os.path.join(log_reg_dir, 'optimal_threshold.txt')
-    
-    # Additional calibration plots:
     calibration_loess_file = os.path.join(log_reg_dir, 'calibration_loess.png')
     calibration_logistic_file = os.path.join(log_reg_dir, 'calibration_logistic.png')
 
@@ -106,8 +140,10 @@ def main():
     # -------------------------
     auc = roc_auc_score(y_val, y_pred_proba)
     brier = brier_score_loss(y_val, y_pred_proba)
-    print(f"Validation AUC: {auc:.4f}")
-    print(f"Brier Score: {brier:.4f}")
+    auc_ci = bootstrap_auc(y_val, y_pred_proba)
+    brier_ci = bootstrap_brier(y_val, y_pred_proba)
+    print(f"Validation AUC: {auc:.4f} (95% CI: {auc_ci[0]:.4f}-{auc_ci[1]:.4f})")
+    print(f"Brier Score: {brier:.4f} (95% CI: {brier_ci[0]:.4f}-{brier_ci[1]:.4f})")
 
     # -------------------------
     # 4) Determine the optimal classification threshold using Youden's J statistic
@@ -118,38 +154,37 @@ def main():
     optimal_threshold = thresholds[ix]
     print(f"Optimal Threshold (Youden's J): {optimal_threshold:.4f}")
 
-    # Save the optimal threshold for future use
     with open(optimal_threshold_file, 'w') as f:
         f.write(str(optimal_threshold))
 
     # -------------------------
-    # 5) Compute classification metrics across a range of thresholds
+    # 5) Compute classification metrics and their confidence intervals across a range of thresholds
     # -------------------------
-    threshold_range = np.linspace(0.25, 0.75, 9)  # Define a range of thresholds from 0.25 to 0.75
+    threshold_range = np.linspace(0.25, 0.75, 9)  # e.g. thresholds from 0.25 to 0.75
     threshold_metrics = {}
 
-    # Compute metrics for each threshold in the range
     for t in threshold_range:
-        precision, recall, specificity, accuracy = compute_classification_metrics(
-            y_val, y_pred_proba, t
-        )
+        precision, recall, specificity, accuracy = compute_classification_metrics(y_val, y_pred_proba, t)
+        ci = bootstrap_classification_metrics(y_val, y_pred_proba, t)
         threshold_metrics[round(t, 2)] = {
-            'Sensitivity (Recall)': recall,
-            'Specificity': specificity,
-            'PPV (Precision)': precision,
-            'Accuracy': accuracy
+            'Sensitivity (Recall)': {'value': recall, '95% CI': ci['recall']},
+            'Specificity': {'value': specificity, '95% CI': ci['specificity']},
+            'PPV (Precision)': {'value': precision, '95% CI': ci['precision']},
+            'Accuracy': {'value': accuracy, '95% CI': ci['accuracy']}
         }
 
-    print("Threshold analysis metrics (Sensitivity, Specificity, PPV, Accuracy):")
+    print("Threshold analysis metrics (Sensitivity, Specificity, PPV, Accuracy with 95% CIs):")
     for t, m in threshold_metrics.items():
         print(f"Threshold {t}: {m}")
 
     # -------------------------
-    # 6) Save evaluation metrics to a JSON file
+    # 6) Save evaluation metrics (with CIs) to a JSON file
     # -------------------------
     metrics = {
         'AUC': auc,
+        'AUC 95% CI': {'lower': auc_ci[0], 'upper': auc_ci[1]},
         'Brier Score': brier,
+        'Brier Score 95% CI': {'lower': brier_ci[0], 'upper': brier_ci[1]},
         'Optimal Threshold (Youden\'s J)': float(optimal_threshold),
         'Threshold Analysis': threshold_metrics
     }
@@ -160,7 +195,7 @@ def main():
     # -------------------------
     # 7) Generate Calibration Plots
     # -------------------------
-    # (a) Standard calibration curve (using scikit-learn's calibration_curve)
+    # (a) Standard calibration curve using scikit-learn's calibration_curve
     prob_true, prob_pred = calibration_curve(y_val, y_pred_proba, n_bins=10)
     plt.figure(figsize=(10, 6))
     plt.plot(prob_pred, prob_true, marker='o', label='Calibration Curve')
@@ -173,12 +208,12 @@ def main():
     plt.close()
     print(f"Calibration curve saved to {calibration_plot_file}")
 
-    # (b) LOESS calibration plot using seaborn.regplot with lowess=True
+    # (b) LOESS calibration plot using seaborn.regplot (with CI)
     plt.figure(figsize=(10, 6))
     sns.regplot(x=y_pred_proba, y=y_val, 
                 scatter_kws={"s": 20, "alpha": 0.5},
                 lowess=True, 
-                ci=None)
+                ci=95)
     plt.title('Calibration with LOESS')
     plt.xlabel('Predicted Probability')
     plt.ylabel('Observed Outcome')
@@ -188,12 +223,12 @@ def main():
     plt.close()
     print(f"LOESS calibration plot saved to {calibration_loess_file}")
 
-    # (c) Logistic regression calibration plot using seaborn.regplot with logistic=True
+    # (c) Logistic regression calibration plot using seaborn.regplot (with CI)
     plt.figure(figsize=(10, 6))
     sns.regplot(x=y_pred_proba, y=y_val, 
                 scatter_kws={"s": 20, "alpha": 0.5},
                 logistic=True, 
-                ci=None)
+                ci=95)
     plt.title('Calibration with Logistic Regression Fit')
     plt.xlabel('Predicted Probability')
     plt.ylabel('Observed Outcome')
@@ -218,5 +253,4 @@ def main():
     print(f"ROC curve saved to {roc_curve_file}")
 
 if __name__ == "__main__":
-    # Execute the main function when the script is run directly
     main()
