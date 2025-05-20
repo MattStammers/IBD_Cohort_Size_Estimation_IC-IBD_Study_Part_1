@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import joblib
 import json
+import numpy as np
 
 def main():
     """
@@ -92,36 +93,52 @@ def main():
         print(f"Final cohort size estimate saved to {output_file}")
 
         # ---------------------------------------------------------------------
-        # 7) Save model coefficients
+        # 7) Save model coefficients + odds ratios (handling a Pipeline)
         # ---------------------------------------------------------------------
-        # Load your trained model
-        model_path = os.path.abspath(os.path.join(script_dir, '../models/ibd_logreg.pkl'))
+        # Load your trained pipeline or model
+        model_path = os.path.abspath(os.path.join(script_dir, '../data/log_reg/final_model.pkl'))
         model = joblib.load(model_path)
 
-        # Load the feature‐index map
+        # If it's a Pipeline, grab the final estimator; otherwise use the model directly
+        from sklearn.pipeline import Pipeline
+        if isinstance(model, Pipeline):
+            # assume the last step is your LogisticRegression
+            lr = model.steps[-1][1]
+        else:
+            lr = model
+
+        # Verify we have coefficients
+        if not hasattr(lr, 'coef_'):
+            raise AttributeError(f"Model object {lr} has no 'coef_' attribute")
+
+        # Load the feature–index map
         selected_indices_path = os.path.join(log_reg_dir, 'selected_indices.json')
         with open(selected_indices_path, 'r') as f:
             selected_indices = json.load(f)
 
-        # Build a list of feature names in the order expected by model.coef_
+        # Reconstruct feature list in coefficient order
         features = [None] * len(selected_indices)
-        for feature_name, idx in selected_indices.items():
-            features[idx] = feature_name
+        for feat, idx in selected_indices.items():
+            features[idx] = feat
 
         # Extract coefficients and intercept
-        coef_array = model.coef_[0]       
-        intercept = model.intercept_[0]
+        coef_array = lr.coef_[0]        # shape = (n_features,)
+        intercept = lr.intercept_[0]
 
-        # Assemble into a DataFrame
+        # Build DataFrame
         coeff_df = pd.DataFrame({
             'feature': ['(intercept)'] + features,
             'coefficient': [intercept] + coef_array.tolist()
         })
 
-        # Write to CSV in log_reg folder
+        # Compute odds ratios
+        coeff_df['odds_ratio'] = np.exp(coeff_df['coefficient'])
+
+        # Save to CSV in log_reg folder
         coeffs_output = os.path.join(log_reg_dir, 'model_coefficients.csv')
         coeff_df.to_csv(coeffs_output, index=False)
-        print(f"Model coefficients saved to {coeffs_output}")
+        print(f"Model coefficients and odds ratios saved to {coeffs_output}")
+
 
     except Exception as e:
         print(f"An error occurred: {e}")
