@@ -3,6 +3,8 @@ import os
 import joblib
 import json
 import numpy as np
+from sklearn.pipeline import Pipeline
+from sklearn.calibration import CalibratedClassifierCV
 
 def main():
     """
@@ -93,52 +95,57 @@ def main():
         print(f"Final cohort size estimate saved to {output_file}")
 
         # ---------------------------------------------------------------------
-        # 7) Save model coefficients + odds ratios (handling a Pipeline)
+        # 7) Save model coefficients + odds ratios (unwrap Pipeline & CalibratedClassifierCV)
         # ---------------------------------------------------------------------
         # Load your trained pipeline or model
         model_path = os.path.abspath(os.path.join(script_dir, '../data/log_reg/final_model.pkl'))
         model = joblib.load(model_path)
-
-        # If it's a Pipeline, grab the final estimator; otherwise use the model directly
-        from sklearn.pipeline import Pipeline
+   
+        # Step A: if it’s a Pipeline, grab its final step
         if isinstance(model, Pipeline):
-            # assume the last step is your LogisticRegression
-            lr = model.steps[-1][1]
+            final_step = model.steps[-1][1]
         else:
-            lr = model
-
-        # Verify we have coefficients
-        if not hasattr(lr, 'coef_'):
-            raise AttributeError(f"Model object {lr} has no 'coef_' attribute")
-
+            final_step = model
+   
+        # Step B: if it’s a CalibratedClassifierCV, grab the base estimator
+        if isinstance(final_step, CalibratedClassifierCV):
+            # take the first fold’s calibrated classifier
+            cal = final_step.calibrated_classifiers_[0]
+            base_lr = cal.base_estimator
+        else:
+            base_lr = final_step
+   
+        # sanity check
+        if not hasattr(base_lr, 'coef_'):
+            raise AttributeError(f"Unwrapped object {base_lr} has no 'coef_'")
+   
         # Load the feature–index map
         selected_indices_path = os.path.join(log_reg_dir, 'selected_indices.json')
         with open(selected_indices_path, 'r') as f:
             selected_indices = json.load(f)
-
+   
         # Reconstruct feature list in coefficient order
         features = [None] * len(selected_indices)
         for feat, idx in selected_indices.items():
             features[idx] = feat
-
-        # Extract coefficients and intercept
-        coef_array = lr.coef_[0]        # shape = (n_features,)
-        intercept = lr.intercept_[0]
-
+   
+        # Extract coefficients & intercept
+        coef_array = base_lr.coef_[0]        
+        intercept   = base_lr.intercept_[0]
+   
         # Build DataFrame
         coeff_df = pd.DataFrame({
-            'feature': ['(intercept)'] + features,
+            'feature':     ['(intercept)'] + features,
             'coefficient': [intercept] + coef_array.tolist()
         })
-
+   
         # Compute odds ratios
         coeff_df['odds_ratio'] = np.exp(coeff_df['coefficient'])
-
+   
         # Save to CSV in log_reg folder
         coeffs_output = os.path.join(log_reg_dir, 'model_coefficients.csv')
         coeff_df.to_csv(coeffs_output, index=False)
         print(f"Model coefficients and odds ratios saved to {coeffs_output}")
-
 
     except Exception as e:
         print(f"An error occurred: {e}")
