@@ -1,5 +1,7 @@
 import pandas as pd
 import os
+import joblib
+import json
 
 def main():
     """
@@ -88,6 +90,38 @@ def main():
             f.write(f"Final IBD cohort size estimate: {final_cohort_size}\n")
 
         print(f"Final cohort size estimate saved to {output_file}")
+
+        # ---------------------------------------------------------------------
+        # 7) Save model coefficients
+        # ---------------------------------------------------------------------
+        # Load your trained model
+        model_path = os.path.abspath(os.path.join(script_dir, '../models/ibd_logreg.pkl'))
+        model = joblib.load(model_path)
+
+        # Load the feature‐index map
+        selected_indices_path = os.path.join(log_reg_dir, 'selected_indices.json')
+        with open(selected_indices_path, 'r') as f:
+            selected_indices = json.load(f)
+
+        # Build a list of feature names in the order expected by model.coef_
+        features = [None] * len(selected_indices)
+        for feature_name, idx in selected_indices.items():
+            features[idx] = feature_name
+
+        # Extract coefficients and intercept
+        coef_array = model.coef_[0]       
+        intercept = model.intercept_[0]
+
+        # Assemble into a DataFrame
+        coeff_df = pd.DataFrame({
+            'feature': ['(intercept)'] + features,
+            'coefficient': [intercept] + coef_array.tolist()
+        })
+
+        # Write to CSV in log_reg folder
+        coeffs_output = os.path.join(log_reg_dir, 'model_coefficients.csv')
+        coeff_df.to_csv(coeffs_output, index=False)
+        print(f"Model coefficients saved to {coeffs_output}")
 
     except Exception as e:
         print(f"An error occurred: {e}")
