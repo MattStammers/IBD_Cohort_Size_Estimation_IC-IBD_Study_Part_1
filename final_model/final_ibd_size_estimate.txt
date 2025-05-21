@@ -1,3 +1,0 @@
-Number of IBD-positive predictions (IBD_Predicted == 1): 8060
-Number of IBD-suggestive patients not in predictions: 5950
-Final IBD cohort size estimate: 12998
