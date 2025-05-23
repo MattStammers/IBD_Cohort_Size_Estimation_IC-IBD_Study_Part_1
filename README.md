@@ -19,6 +19,12 @@ You will also need to prepare all your notebooks and re-organise the code around
 
 Realistically, only very determined people are going to do this but that is the point of putting the code out - to maximise transparency.
 
+### Model
+
+The final model is offered up open source. No guarantees are given that it will be of any use at all because the input datastreams are very difficult to fit but it is avialable as a pickle file if people want it.
+
+Full disclaimer: this model is not a medical device and comes with no CE mark or any guarantees whatsoever. Use at your own risk.
+
 ### Licence
 
 This project and the associated modls are Attribution-NonCommercial 4.0 International Licensed. The copyright holder is Matt Stammers and University Hospital Southampton NHS Foundation Trust. 
