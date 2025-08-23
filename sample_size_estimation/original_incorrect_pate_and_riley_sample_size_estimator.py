@@ -1,4 +1,27 @@
-# This sample size estimator uses the formula proposed by Pate and Riley for medical models. Assumed shrinkage of 0.9 is used here. Reducing the shrinkage further for thie project may be appropriate but doesn't have a dramatic effect on the final sample size.
+'''
+============
+ARCHIVED DUE TO BUGS
+Date: 23/08/2025
+
+Don't use this sample size calculator please as it contains two bugs I discovered only today. I will leave it up for reference as it calculates correctly for the paper but it is not reliable if others would like to replicate the study.
+
+Bugs:
+1. It is written such that num_predictors can become negative - this should not be possible but can happen with this formula.
+2. The formula is not quite right and r2 should be divided by shrinkage. I didn't know this at the start as I now realise I misread the original paper. If you refer to the newer version you will see how this has been rectified.
+
+
+#########################
+Key Finding:
+============
+This all brings up a far more important point about whether such formulas are useful or not for database studies. I would argue that they are not very useful based on this experience because attrition is incredibly high. 
+
+If you are going to use one of these formulas for a database study please create a substantial margin of error in your sample size.
+
+I recommend multiplying the number you get from the formula by the number of databases you are querying (unless you know beforehand the number of patients in each one which is doubtful).
+
+Good luck!
+########################
+'''
 
 import math
 
