@@ -1,11 +1,12 @@
 """
-Binary clinical prediction — minimum sample size by Riley et al. (criterion i, shrinkage)
+Binary clinical prediction — minimum sample size by Riley et al. (criterion i, shrinkage) - Final Version
 
 Author: Matt Stammers 
 Date: 23/08/2025
 
-This is a fixed (patched) version of the prior code which contained several errors which I only discovered post publication. The other code works but is easy to crash and slightly under-estimates the total cohort size (by in my case 195 patients). It still however, obtained values above 20 EPV for me.
-If you are not sure and don't have access to a medical statistician I recommend sticking to the 20 EPV rule of thumb as it is far easier to get right. The revised formula is below:
+This is a fixed (patched) version of the prior code which contained several errors which I only discovered post publication. The other code works but is easy to crash and slightly under-estimates the total cohort size (by in my case 195 patients). It still however, obtained values above 20 EPV and doesn't affect the final results at all.
+
+If you are not sure and don't have access to a medical statistician I recommend sticking to the 20 EPV rule of thumb as it is far easier to get right. However, this formula is correct and given below:
 
 Revised Formula (binary logistic):
     n = K / ((S - 1) * ln(1 - R2_CS / S))
@@ -20,7 +21,23 @@ Notes
   - Prevalence π is not part of the formula; it is used AFTER n is computed to report expected events E = n·π and EPP = E/K.
   - Keep K as the number of *parameters* (e.g., categorical levels, spline terms, interactions each add parameters).
 
-This file intentionally contains only the binary shrinkage criterion — no other criteria or add-ons and is consisent with section 2.1 of this paper: (https://pmc.ncbi.nlm.nih.gov/articles/PMC10012398/pdf/10.1177_09622802231151220.pdf
+This file intentionally contains only the binary shrinkage criterion — no other criteria or add-ons.
+
+Reference: This is consisent with section 2.1 of the original paper on which this was based: https://pmc.ncbi.nlm.nih.gov/articles/PMC10012398/pdf/10.1177_09622802231151220.pdf - use this not the prior version for your papers as the old version can be negative and has some other bugs in it.
+
+########################
+=======
+WARNING
+=======
+
+I have post-publication realised that given this was a database study the above formula fails as soon as you get attrition in the number of samples (which happens very quickly in database studies). 
+
+As a result my recommendation would be to multiply the number obtained by this formula by a factor of the number of databases under study.
+
+If this is not done then the risks of underpowering become very high with this formula alone which was not designed for this type of study.
+
+########################
+
 """
 
 from __future__ import annotations
