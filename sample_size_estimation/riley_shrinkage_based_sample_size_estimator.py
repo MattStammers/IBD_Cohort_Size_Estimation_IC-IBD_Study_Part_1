@@ -4,9 +4,10 @@ Binary clinical prediction — minimum sample size by Riley et al. (criterion i,
 Author: Matt Stammers 
 Date: 23/08/2025
 
-This is a fixed (patched) version of the prior code which contained several errors.
+This is a fixed (patched) version of the prior code which contained several errors which I only discovered post publication. The other code works but is easy to crash and slightly under-estimates the total cohort size (by in my case 195 patients). It still however, obtained values above 20 EPV for me.
+If you are not sure and don't have access to a medical statistician I recommend sticking to the 20 EPV rule of thumb as it is far easier to get right. The revised formula is below:
 
-Formula (binary logistic):
+Revised Formula (binary logistic):
     n = K / ((S - 1) * ln(1 - R2_CS / S))
 
 Where
