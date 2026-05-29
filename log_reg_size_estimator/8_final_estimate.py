@@ -58,7 +58,7 @@ def main():
         # Extract study IDs where IBD_Predicted equals 1.
         positive_predictions_list = ibd_predictions.loc[ibd_predictions['IBD_Predicted'] == 1, 'study_id']
         # Adjust positive predictions by the precision of this algorithm
-        positive_predictions = int(round(len(positive_predictions_list) * 0.86))
+        positive_predictions = int(round(len(positive_predictions_list) * 0.84))
         print(f"Number of True IBD-positive predictions: {positive_predictions}")
 
         # ---------------------------------------------------------------------
@@ -73,7 +73,7 @@ def main():
         print(f"Number of IBD-suggestive patients not in ibd_predictions: {len(suggestive_only)}")
 
         # Apply a precision adjustment factor (83% precision) to the suggestive patients count.
-        suggestive_precision_adjusted = int(round(len(suggestive_only) * 0.83))
+        suggestive_precision_adjusted = int(round(len(suggestive_only) * 0.79))
         print(f"Number of True IBD-suggestive patients not in ibd_predictions after precision adjustment: {suggestive_precision_adjusted}")
 
         # ---------------------------------------------------------------------
