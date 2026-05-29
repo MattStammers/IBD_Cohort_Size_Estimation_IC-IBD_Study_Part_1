@@ -18,7 +18,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import fairlearn  # Include fairness metrics if needed; otherwise, remove
 
-def one_standard_error_rule_search(
+def one_standard_deviation_search(
     X, 
     y, 
     model, 
@@ -28,7 +28,7 @@ def one_standard_error_rule_search(
     inner_cv
 ):
     """
-    Perform a custom hyperparameter search using the one-standard-error rule.
+    Perform a custom hyperparameter search using conservative SD-based heuristic.
     """
     cv_results = []
     
@@ -154,7 +154,7 @@ def main():
         # (A) Use the one-standard-error rule to search for the best hyperparameter (C)
         #     Since the parameter is inside the calibrated classifier, use 'calibrated__estimator__C'
         # ---------------------------------------------------------------------
-        chosen_param, cv_results = one_standard_error_rule_search(
+        chosen_param, cv_results = one_standard_deviation_search(
             X_tr, 
             y_tr, 
             model=pipeline, 

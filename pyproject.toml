@@ -1,18 +1,19 @@
 [tool.poetry]
 name = "ibd_cohort_size_estimation"
 version = "1.0.0"
-description = "A data pipeline for IBD Cohort Size estimation using the jaccard index and logistic regression with fairness and lasso penalization."
+description = "A data pipeline for IBD cohort size estimation using patient-level source integration and logistic regression."
 authors = ["matthew.stammers@uhs.nhs.uk"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
-pandas = "^2.0.0"
-numpy = "^1.23.0"
-fairlearn = "^0.8.0"
-statsmodels = "^0.14.4"
-matplotlib = "^3.10.0"
-seaborn = "^0.13.2"
-scikit-learn = "^1.5.0"
+python = ">=3.10,<3.11"
+pandas = "2.0.3"
+numpy = "1.24.4"
+fairlearn = "0.8.0"
+statsmodels = "0.14.4"
+matplotlib = "3.10.0"
+seaborn = "0.13.2"
+scikit-learn = "1.3.2"
+joblib = "1.4.2"
 
 [build-system]
 requires = ["poetry-core"]
