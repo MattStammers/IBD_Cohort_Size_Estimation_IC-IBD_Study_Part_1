@@ -330,6 +330,7 @@ The supplied model artifacts and code are provided for research transparency. Th
 
 - 23/08/2025: sample size estimators corrected.
 - 29/05/2026: conservative standard deviation-based function naming corrected and canonical package versions pinned along with complete README re-write.
+- 30/05/2026: fixed hardcoded precision adjustment error missed in initial final cohort size estimator.
 
 ## Licence
 
