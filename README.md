@@ -1,17 +1,21 @@
-# IBD Cohort Size Estimation Project
+# IBD Cohort Size Estimation
 
-## Author
+### Subtitle: IBD_NLP_Cohort_Identification_Models_IC-IBD_Part_1
 
-Matt Stammers
+## By Dr Matt Stammers
 
-Date: 07/01/2025
-Readme Re-worked: 29/05/2026
+### Originally first uploaded: 07/01/2025. Readme updated: 29/05/2026.
 
 ## Overview
 
 This repository contains the analytical code used to estimate inflammatory bowel disease (IBD) cohort size from linked patient-level data sources. The main workflow combines structured features derived from routine data with a regularized and calibrated logistic regression model, then applies additional adjustment using clinic letter signals to produce a final cohort size estimate.
 
 The repository is intended to support methodological transparency for academic reporting. It documents the implemented analytical steps, the order in which they are run, and the intermediate artifacts that are created during model development, evaluation, and final estimation.
+
+## Associated Publications
+
+1. Stammers M, Sartain S, Cummings JF, Kipps C, Nouraei R, Gwiggner M, Metcalf C, Batchelor J. Identification of cohorts with inflammatory bowel disease amidst fragmented clinical databases via machine learning. Digestive Diseases and Sciences. 2025;70(10):3309-22. [Digestive Diseases and Sciences](https://link.springer.com/article/10.1007/s10620-025-09323-1)
+2. Stammers M, Ramgopal B, Owusu Nimako A, Vyas A, Nouraei R, Metcalf C, Batchelor J, Shepherd J, Gwiggner M. A foundation systematic review of natural language processing applied to gastroenterology and hepatology. BMC Gastroenterology. 2025;25(1):58. [BMC Gastroenterology](https://bmcgastroenterol.biomedcentral.com/articles/10.1186/s12876-025-03608-5)
 
 ## Repository Contents
 
