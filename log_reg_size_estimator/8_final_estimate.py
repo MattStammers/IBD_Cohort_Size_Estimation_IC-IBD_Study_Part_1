@@ -72,7 +72,7 @@ def main():
         suggestive_only = suggestive_patients[~suggestive_patients.isin(positive_predictions_list)]
         print(f"Number of IBD-suggestive patients not in ibd_predictions: {len(suggestive_only)}")
 
-        # Apply a precision adjustment factor (83% precision) to the suggestive patients count.
+        # Apply a precision adjustment factor (79% precision) to the suggestive patients count.
         suggestive_precision_adjusted = int(round(len(suggestive_only) * 0.79))
         print(f"Number of True IBD-suggestive patients not in ibd_predictions after precision adjustment: {suggestive_precision_adjusted}")
 
